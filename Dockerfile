@@ -1,56 +1,20 @@
-FROM node:20-alpine AS base
+# Build stage
+FROM node:20-alpine AS builder
 
-# Dependencies stage
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+COPY package*.json ./
 RUN npm ci
 
-# Builder stage
-FROM base AS builder
-WORKDIR /app
-
-# Accept build arguments
-# ARG NEXT_PUBLIC_API_URL
-# ARG NEXT_PUBLIC_FRONTEND_URL
-
-# Set as environment variables for the build
-# ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-# ENV NEXT_PUBLIC_FRONTEND_URL=${NEXT_PUBLIC_FRONTEND_URL}
-
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build Next.js application
 RUN npm run build
 
 # Production stage
-FROM base AS runner
-WORKDIR /app
+FROM nginx:alpine
 
-ENV NODE_ENV=production
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+EXPOSE 80
 
-COPY --from=builder /app/public ./public
-
-# Set correct permissions
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Copy built files
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-# COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
-
-EXPOSE 3000
-
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node", "server.js"]
+CMD ["nginx", "-g", "daemon off;"]
